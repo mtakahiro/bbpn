@@ -8,7 +8,7 @@ from astropy.convolution import Gaussian2DKernel,convolve_fft
 from astropy.stats import sigma_clip
 
 
-def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
+def run(file_cal, file_seg=None, f_sbtr_amp=False, f_sbtr_each_amp=False, plot_res=False, file_out=None, f_write=True):
     '''
     Parameters
     ----------
@@ -18,8 +18,14 @@ def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
     file_seg : str
         segmentation mask for file_cal. The data extension is assumed to be 0.
 
+    f_sbtr_each_amp : bool
+        Subtract 1/f noise at each of four amplifiers.
+
     plot_res : bool
         Show results of each step.
+
+    f_sbtr_amp : bool
+        Subtract (non-1/f) bkg at each of four amplifiers.
 
     Returns
     -------
@@ -92,24 +98,30 @@ def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
     #
 
     # 3.1 Global background in each apmlifiers;
-
     dely = 512 # Maybe specific to JWST detector;
     yamp_low = np.arange(0, 2048, dely) # this should be 4
     nyamps = len(yamp_low)
 
     fd_cal_ampsub = fd_cal.copy()
+    if f_sbtr_amp:
+        sky_amp = np.zeros(nyamps, float)
+        for aa in range(nyamps):
+            print('Working on the %dth apmlifier'%aa)
+            fd_cal_amp_tmp = fd_cal_fin[yamp_low[aa]:yamp_low[aa]+dely,:]
+            sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp)
+            fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely,:] -= sky_amp[aa]
 
-    sky_amp = np.zeros(nyamps, float)
-    for aa in range(nyamps):
-        fd_cal_amp_tmp = fd_cal_fin[yamp_low[aa]:yamp_low[aa]+dely,:]
-        sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp)
-        fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely,:] -= sky_amp[aa]
-        
+
     # 3.2 Then 1/f noise;
     # This goes through each column (to x direction) at each amplifier.
     delx = 1
-    xamp_low = np.arange(0, 2048, delx)
+    xamp_low = np.arange(4, 2044, delx)
     nxamps = len(xamp_low)
+
+    if not f_sbtr_each_amp:
+        dely = 2048
+        yamp_low = np.arange(0, 2048, dely) # this should be 4
+        nyamps = len(yamp_low)
 
     fd_cal_ampsub_fsub = fd_cal_ampsub.copy()
     sky_f = np.zeros((nyamps,nxamps), float)
@@ -119,6 +131,7 @@ def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
             fd_cal_amp_tmp = fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx]
             sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp)
             fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
+
 
 
     #
