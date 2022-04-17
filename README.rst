@@ -1,6 +1,6 @@
 Bye Bye Pink Noise (BBPN)
 
-1/f noise reduction tool for JWST cal.fits images.
+1/f-noise reduction tool for JWST cal.fits images.
 
 
 Demonstration
@@ -25,7 +25,7 @@ or
 Caveats
 ~~~~~~~
 
-Best results will be obtained when a perfect segmentation mask is provided. 
+Good results will be obtained when a perfect segmentation mask is provided. 
 However, this is not always the case for e.g. a crowded field or around regions aroung large galaxies.
 If this tool seems to be over-subtracting background, turn ``f_sbtr_each_amp`` and/or ``f_sbtr_amp`` to False.
 
