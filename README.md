@@ -6,6 +6,11 @@ Bye Bye Pink Noise (BBPN)
 
 Demonstration
 ~~~~~~~~~~~~~
+
+![Alt Text](./demo.gif)
+
+![](./demo.gif)
+
 .. image:: ./demo.gif
 
 
