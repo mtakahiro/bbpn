@@ -23,7 +23,7 @@ except ImportError:
     from distutils.core import setup
 
 
-readme = open('README.md').read()
+readme = open('README.rst').read()
 doclink = """
 
 
@@ -33,7 +33,7 @@ Documentation
 The full documentation can be generated with Sphinx"""
 
 history = open('HISTORY.rst').read().replace('.. :changelog:', '')
-desc = open("README.md").read()
+desc = open("README.rst").read()
 
 PACKAGE_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 print(PACKAGE_PATH)
