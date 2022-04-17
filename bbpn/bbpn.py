@@ -8,7 +8,7 @@ from astropy.convolution import Gaussian2DKernel,convolve_fft
 from astropy.stats import sigma_clip
 
 
-def run(file_cal, file_seg=None, f_sbtr_amp=False, f_sbtr_each_amp=False, plot_res=False, file_out=None, f_write=True):
+def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, plot_res=False, file_out=None, f_write=True):
     '''
     Parameters
     ----------

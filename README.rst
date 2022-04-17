@@ -22,6 +22,14 @@ or
     python install setup.py
 
 
+Caveats
+~~~~~~~
+
+Best results will be obtained when a perfect segmentation mask is provided. 
+However, this is not always the case for e.g. a crowded field or around regions aroung large galaxies.
+If this tool seems to be over-subtracting background, turn ``f_sbtr_each_amp`` and/or ``f_sbtr_amp`` to False.
+
+
 Examples
 ~~~~~~~~
 
@@ -37,4 +45,6 @@ Optional Arguments
 - ``plot_res``: Plot results from each step. Defaule False. 
 - ``file_out``: Output file name. Default None.
 - ``f_write``: Flag to write the output fits file. Default True.
+- ``f_sbtr_each_amp``: Calculate and subtract 1/f noise at each of four amplifiers. Default True.
+- ``f_sbtr_amp``: Subtract (non-1/f) bkg at each of four amplifiers. Default True.
 
