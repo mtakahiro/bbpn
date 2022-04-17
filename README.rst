@@ -10,8 +10,11 @@ Demonstration
 
 Examples
 ~~~~~~~~
+
 .. code-block:: bash
+
     from bbpn import bbpn
+
     bbpn.run(cal_file)
 
 
