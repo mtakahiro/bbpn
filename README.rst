@@ -8,6 +8,20 @@ Demonstration
 .. image:: ./demo.gif
 
 
+Installation & Documentation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    pip install bbpn
+
+or
+
+.. code-block:: bash
+
+    python install setup.py
+
+
 Examples
 ~~~~~~~~
 
