@@ -37,7 +37,7 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, plot_res
         file_seg = file_cal.replace('.fits','_seg.fits')
         if not os.path.exists(file_seg):
             print('No segmap found. Exiting.')
-            os.exit()
+            return False
 
     # Open files;
     fd_cal = fits.open(file_cal)['SCI'].data
