@@ -2,13 +2,16 @@ import numpy as np
 from numpy import mean
 import matplotlib.pyplot as plt
 import os,sys
+from scipy import stats
+import statistics
 
 from astropy.io import fits,ascii
 from astropy.convolution import Gaussian2DKernel,convolve_fft
 from astropy.stats import sigma_clip
 
 
-def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
+def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_global=False,
+    plot_res=False, file_out=None, f_write=True, sigma=1.5, maxiters=5, sigma_1=1.5, maxiters_1=10):
     '''
     Parameters
     ----------
@@ -18,8 +21,14 @@ def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
     file_seg : str
         segmentation mask for file_cal. The data extension is assumed to be 0.
 
+    f_sbtr_each_amp : bool
+        Subtract 1/f noise at each of four amplifiers.
+
     plot_res : bool
         Show results of each step.
+
+    f_sbtr_amp : bool
+        Subtract (non-1/f) bkg at each of four amplifiers.
 
     Returns
     -------
@@ -31,7 +40,7 @@ def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
         file_seg = file_cal.replace('.fits','_seg.fits')
         if not os.path.exists(file_seg):
             print('No segmap found. Exiting.')
-            os.exit()
+            return False
 
     # Open files;
     fd_cal = fits.open(file_cal)['SCI'].data
@@ -41,8 +50,6 @@ def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
     #
     # 1. Exclude positive pixels originating from sources;
     #
-    sigma_1 = 3.
-    maxiters_1 = 10
     con = np.where((fd_seg > 0) | (dq_cal>0))
     fd_cal_stat = fd_cal.copy()
     fd_cal_stat[con] = np.nan
@@ -92,32 +99,47 @@ def run(file_cal, file_seg=None, plot_res=False, file_out=None, f_write=True):
     #
 
     # 3.1 Global background in each apmlifiers;
-
     dely = 512 # Maybe specific to JWST detector;
     yamp_low = np.arange(0, 2048, dely) # this should be 4
     nyamps = len(yamp_low)
 
     fd_cal_ampsub = fd_cal.copy()
+    if f_sbtr_amp:
+        sky_amp = np.zeros(nyamps, float)
+        for aa in range(nyamps):
+            print('Working on the %dth apmlifier'%aa)
+            fd_cal_amp_tmp = fd_cal_fin[yamp_low[aa]:yamp_low[aa]+dely,:]
+            sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp)
+            fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely,:] -= sky_amp[aa]
 
-    sky_amp = np.zeros(nyamps, float)
-    for aa in range(nyamps):
-        fd_cal_amp_tmp = fd_cal_fin[yamp_low[aa]:yamp_low[aa]+dely,:]
-        sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp)
-        fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely,:] -= sky_amp[aa]
-        
+
     # 3.2 Then 1/f noise;
     # This goes through each column (to x direction) at each amplifier.
     delx = 1
-    xamp_low = np.arange(0, 2048, delx)
+    xamp_low = np.arange(4, 2044, delx)
     nxamps = len(xamp_low)
+
+    if not f_sbtr_each_amp:
+        # Then, subtract global sky
+        dely = 2048
+        yamp_low = np.arange(0, 2048, dely)
+        nyamps = len(yamp_low)
 
     fd_cal_ampsub_fsub = fd_cal_ampsub.copy()
     sky_f = np.zeros((nyamps,nxamps), float)
+    
+    if f_only_global:
+        delx = 2040
+        xamp_low = np.arange(4, 2044, 2040)
+        nxamps = len(xamp_low)
+
     for aa in range(nyamps):
         print('Working on the %dth apmlifier'%aa)
         for bb in range(nxamps):
             fd_cal_amp_tmp = fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx]
-            sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp)
+            filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters)
+            sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
+            #sky_f[aa,bb] = statistics.mode(fd_cal_amp_tmp[~filtered_data.mask])
             fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
 
 
