@@ -10,7 +10,8 @@ from astropy.convolution import Gaussian2DKernel,convolve_fft
 from astropy.stats import sigma_clip
 
 
-def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=None):
+def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=None,
+                nxbin = 1000):
     '''Note that for NIRCam, plot is transversed, so it looks different from the input fits in e.g., DS9.
     '''
     fig_mosaic = """
@@ -33,7 +34,6 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
         vmin, vmax = np.nanpercentile(fd_cal, [1,99])
     ax1.imshow(fd_cal, vmin=vmin, vmax=vmax, origin='lower')
 
-    nxbin = 1000
     yy = np.linspace(0, fd_cal.shape[0], nxbin)
     xx = np.linspace(0, fd_cal.shape[1], nxbin)
     fx = np.zeros(len(xx), float)
@@ -49,8 +49,8 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
     ax2.plot(xx, fx, ls='-', color='lightblue', lw=1)
     ax3.plot(fy, xx, ls='-', color='lightblue', lw=1)
     if y2max == None or x3max == None:
-        y2max = np.nanpercentile(np.abs(fx),99) * 3
-        x3max = np.nanpercentile(np.abs(fy),99) * 3
+        y2max = np.nanpercentile(np.abs(fx),99) * 1.5
+        x3max = np.nanpercentile(np.abs(fy),99) * 1.5
 
     # Zero point;
     xx = np.arange(0, fd_cal.shape[1], 10)
