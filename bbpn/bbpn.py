@@ -84,7 +84,7 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
 def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_global=False,
     plot_res=False, plot_out='./bbpn_out/', file_out=None, f_write=True, sigma=1.5, 
     maxiters=5, sigma_1=1.5, maxiters_1=10,
-    verbose=True):
+    verbose=True, ymax=2048):
     '''
     Parameters
     ----------
@@ -98,6 +98,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         Show results of each step.
     f_sbtr_amp : bool
         Subtract (non-1/f) bkg at each of four amplifiers.
+    ymax : int
+         detector size
 
     Returns
     -------
@@ -118,18 +120,45 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     dq_cal = fits.open(file_cal)['DQ'].data
     fd_seg = fits.open(file_seg)[0].data
 
-    if INSTRUME == 'NIRCAM':
+    # Mask miri;
+    if INSTRUME == 'MIRI':
+        fd_cal[:748,:359] = np.nan
+        fd_cal[748:,280:359] = np.nan
+        fd_cal[:,1020:] = np.nan
+        # DQ
+        dq_cal[:748,:359] = 1
+        dq_cal[748:,280:359] = 1
+        dq_cal[:,1020:] = 1
+
+        arr_y = np.tile(np.arange(fd_cal.shape[0]), (fd_cal.shape[1], 1)).T
+        arr_x = np.tile(np.arange(fd_cal.shape[1]), (fd_cal.shape[0], 1))
+        con_lyot = np.where( (dq_cal>200000) & (arr_y>748) & (arr_x<359))
+        fd_cal[con_lyot] = np.nan
+
+    if INSTRUME == 'NIRCAM' or INSTRUME == 'MIRI':
         if verbose:
             print('NIRCam image. Transversing')
         fd_cal = fd_cal.T
         dq_cal = dq_cal.T
         fd_seg = fd_seg.T
 
-
     #
     # 1. Exclude positive pixels originating from sources;
     #
-    con = np.where((fd_seg > 0) | (dq_cal>0))
+    if INSTRUME == 'MIRI':
+        var_flat_lim = 1e-4
+        flat_cal = fits.open(file_cal)['VAR_FLAT'].data.T
+        con = np.where((fd_seg > 0) | (dq_cal>0) | (flat_cal < var_flat_lim))
+        # f_only_global = True
+        # f_sbtr_amp = False
+        f_sbtr_each_amp = False
+        ymax = 1024
+        # print('MIRI image - only global sky subtraction is applied.')
+        # file_bkg = file_cal.replace('.fits','_bkg.fits')
+        # fd_bkg = fits.open(file_bkg)[0].data
+    else:
+        con = np.where((fd_seg > 0) | (dq_cal>0))
+
     fd_cal_stat = fd_cal.copy()
     fd_cal_stat[con] = np.nan
 
@@ -190,9 +219,12 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     # 3.1 Global background in each apmlifiers;
     # Note that NIRISS and NIRCam is different...
     dely = 512 # Maybe specific to JWST detector;
-    yamp_low = np.arange(0, 2048, dely) # this should be 4
+    # if INSTRUME == 'MIRI':
+    #     dely = 100
+    yamp_low = np.arange(0, ymax, dely) # this should be 4
     nyamps = len(yamp_low)
 
+    print('3.1 Global background in each apmlifiers')
     fd_cal_ampsub = fd_cal.copy()
     if f_sbtr_amp:
         sky_amp = np.zeros(nyamps, float)
@@ -205,13 +237,13 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     # 3.2 Then 1/f noise;
     # This goes through each column (to x direction) at each amplifier.
     delx = 1
-    xamp_low = np.arange(4, 2044, delx)
+    xamp_low = np.arange(4, ymax-4, delx)
     nxamps = len(xamp_low)
 
     if not f_sbtr_each_amp:
         # Then, subtract global sky
-        dely = 2048
-        yamp_low = np.arange(0, 2048, dely)
+        dely = ymax
+        yamp_low = np.arange(0, ymax, dely)
         nyamps = len(yamp_low)
 
     fd_cal_ampsub_fsub = fd_cal_ampsub.copy()
@@ -219,23 +251,43 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     
     if f_only_global:
         delx = 2040
-        xamp_low = np.arange(4, 2044, 2040)
+        xamp_low = np.arange(4, ymax-4, delx)
         nxamps = len(xamp_low)
 
-    for aa in range(nyamps):
-        print('Working on the %dth apmlifier'%aa)
-        for bb in range(nxamps):
-            fd_cal_amp_tmp = fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx]
-            filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters)
-            sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
-            fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
+    print('3.2 Global background in each apmlifiers')
+    if False:#INSTRUME == 'MIRI':
+        fd_cal_ampsub_fsub[:,:] -= fd_bkg
+    else:
+        for aa in range(nyamps):
+            print('Working on the %dth apmlifier'%aa)
+            for bb in range(nxamps):
+                fd_cal_amp_tmp = fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx]
+                filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters)
+                sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
+                fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
 
+        if INSTRUME == 'MIRI' and not f_only_global:
+            # subtract stripes in the other direction;
+            print('MIRI; subtracting 1/f in the other direction;')
+            for aa in range(nyamps):
+                print('Working on the %dth apmlifier'%aa)
+                for bb in range(nxamps):
+                    fd_cal_amp_tmp = fd_cal_ampsub[xamp_low[bb]:xamp_low[bb]+delx, yamp_low[aa]:yamp_low[aa]+dely]
+                    filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters)
+                    # sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
+                    sky_tmp = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
+                    fd_cal_ampsub_fsub[xamp_low[bb]:xamp_low[bb]+delx, yamp_low[aa]:yamp_low[aa]+dely] -= sky_tmp
+
+    # mask nan for miri;
+    # if INSTRUME == 'MIRI':
+        # con_nan = np.where(flat_cal < var_flat_lim)
+        # fd_cal_ampsub_fsub[con_nan] = np.nan
+        # fd_cal_ampsub_fsub[:] = np.nan
 
     # 
     # 4. Check results in Fourier space
     #
     if plot_res:
-
         plt.close()
         file_png_out = os.path.join(plot_out,'%s'%(file_cal.split('/')[-1].replace('_cal.fits', '_cal_cor.png')))
         fd_cal_ampsub_fsub_masked = fd_cal_ampsub_fsub.copy()
@@ -278,12 +330,14 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         os.system('cp %s %s'%(file_cal,file_out))
         with fits.open(file_out, mode='update') as hdul:
 
-            if INSTRUME == 'NIRCAM':
+            if INSTRUME == 'NIRCAM' or INSTRUME == 'MIRI':
                 if verbose:
                     print('NIRCam image. Transversing')
                 fd_cal_ampsub_fsub = fd_cal_ampsub_fsub.T
+                dq_cal = dq_cal.T
 
             hdul['SCI'].data = fd_cal_ampsub_fsub
+            hdul['DQ'].data = dq_cal
             hdul.flush()
 
     return fd_cal_ampsub_fsub
