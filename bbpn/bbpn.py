@@ -8,6 +8,7 @@ import statistics
 from astropy.io import fits,ascii
 from astropy.convolution import Gaussian2DKernel,convolve_fft
 from astropy.stats import sigma_clip
+from photutils import Background2D, MedianBackground, detect_sources, deblend_sources#, source_properties
 
 
 def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=None,
@@ -84,7 +85,8 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
 def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_global=False,
     plot_res=False, plot_out='./bbpn_out/', file_out=None, f_write=True, 
     sigma=2.5, maxiters=5, sigma_1=1.5, maxiters_1=30, nfracpix_min=0.5, nsig_sky=1.5,
-    verbose=True, ymax=2048, mask_jump=False):
+    verbose=True, ymax=2048, mask_jump=False,
+    bkg_size=20, bkg_filt_size=3):
     '''
     Parameters
     ----------
@@ -323,15 +325,30 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                 bb = mask[1][ii]
                 con = (flags_skip[:,bb] == 0)
                 if len(sky_f[:,bb][con])>0:
-                    fd_tmp = fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx].flatten()
 
+                    # Current estimate of bkg, which is likely overestimated;
+                    # Correct sky_f[aa,bb] using one of the two ref sky values;
+            
+                    # Ref sky - Good pixels in the same row, including other amplifier;
+                    fd_tmp = fd_cal_ampsub_fsub[:, xamp_low[bb]:xamp_low[bb]+delx].flatten()
                     filtered_data = sigma_clip(fd_tmp, sigma=sigma, maxiters=maxiters, cenfunc=mean)
-                    mask_tmp = np.where(np.abs(fd_tmp[~filtered_data.mask]) < sky_amp[aa] + sky_sigma_amp[aa] * nsig_sky)
+                    skydata1 = fd_tmp[~filtered_data.mask]
+                    sky_ref = np.nanmedian(skydata1)
 
-                    # sky_f[aa,bb] = np.nanmedian(sky_f[:,bb][con])
-                    sky_f[aa,bb] = np.nanmedian(fd_tmp[~filtered_data.mask][mask_tmp])
+                    # Ref sky - Good pixels in the same column #, including other amplifier;
+                    if False:
+                        fd_tmp = sky_f[aa,:]
+                        filtered_data = sigma_clip(fd_tmp, sigma=sigma, maxiters=maxiters, cenfunc=mean)
+                        skydata2 = fd_tmp[~filtered_data.mask]
+                        sky_ref_amp = np.nanmedian(skydata2)
+                        
+                        # Combine?
+                        skydata3 = (np.concatenate([skydata1,skydata2]))
+                        sky_ref_both = np.nanmedian(skydata3)
+
+                    # Correct sky;
+                    sky_f[aa,bb] -= sky_ref
                     fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
-
 
         if INSTRUME == 'MIRI' and not f_only_global:
             # subtract stripes in the other direction;
@@ -344,6 +361,15 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                     # sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
                     sky_tmp = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
                     fd_cal_ampsub_fsub[xamp_low[bb]:xamp_low[bb]+delx, yamp_low[aa]:yamp_low[aa]+dely] -= sky_tmp
+
+    # One last bkg tweak, to eliminate discontinuity;
+    data_for_bkg = fd_cal_ampsub_fsub.copy()
+    con_for_bkg = np.where((fd_seg > 0) | (dq_cal>0))
+    data_for_bkg[con_for_bkg] = np.nan
+
+    bkg_estimator = MedianBackground()
+    bkg = Background2D(data_for_bkg, (bkg_size,bkg_size), filter_size=(bkg_filt_size,bkg_filt_size), bkg_estimator=bkg_estimator, exclude_percentile=100)
+    fd_cal_ampsub_fsub -= bkg.background
 
     # mask nan for miri;
     # if INSTRUME == 'MIRI':
