@@ -404,7 +404,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                 dq_cal = dq_cal.T
 
             # Retrieve 0-value pixels back?
-            fd_cal_ampsub_fsub[con_zero] = 0
+            # fd_cal_ampsub_fsub[con_zero] = 0
+            fd_cal_ampsub_fsub[con_zero] = np.nan
 
             hdul['SCI'].data = fd_cal_ampsub_fsub
             hdul['DQ'].data = dq_cal
