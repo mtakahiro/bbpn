@@ -11,7 +11,7 @@ from astropy.stats import sigma_clip
 
 
 def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=None,
-                nxbin = 1000):
+                nxbin=1000):
     '''Note that for NIRCam, plot is transversed, so it looks different from the input fits in e.g., DS9.
     '''
     fig_mosaic = """
@@ -82,9 +82,9 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
 
 
 def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_global=False,
-    plot_res=False, plot_out='./bbpn_out/', file_out=None, f_write=True, sigma=1.5, 
-    maxiters=5, sigma_1=1.5, maxiters_1=10,
-    verbose=True, ymax=2048):
+    plot_res=False, plot_out='./bbpn_out/', file_out=None, f_write=True, 
+    sigma=2.5, maxiters=5, sigma_1=1.5, maxiters_1=30, nfracpix_min=0.5, nsig_sky=1.5,
+    verbose=True, ymax=2048, mask_jump=False):
     '''
     Parameters
     ----------
@@ -100,6 +100,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         Subtract (non-1/f) bkg at each of four amplifiers.
     ymax : int
          detector size
+    nfracpix_min : float
+        Minimum fraction of number for the bkg pixels required for subtraction
 
     Returns
     -------
@@ -115,6 +117,7 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
 
     # Open files;
     hd_cal = fits.open(file_cal)[0].header
+    READPATT = hd_cal['READPATT']
     INSTRUME = hd_cal['INSTRUME']
     fd_cal = fits.open(file_cal)['SCI'].data
     dq_cal = fits.open(file_cal)['DQ'].data
@@ -134,6 +137,14 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         arr_x = np.tile(np.arange(fd_cal.shape[1]), (fd_cal.shape[0], 1))
         con_lyot = np.where( (dq_cal>200000) & (arr_y>748) & (arr_x<359))
         fd_cal[con_lyot] = np.nan
+        if mask_jump:
+            con_jump = np.where( (dq_cal==4) )
+            fd_cal[con_jump] = np.nan
+
+    # Keep record of 0 array;
+    # These are from Grizli's level 1 pipeline;
+    con_zero = np.where((fd_cal == 0) & (dq_cal > 0))
+    fd_cal[con_zero] = np.nan
 
     if INSTRUME == 'NIRCAM' or INSTRUME == 'MIRI':
         if verbose:
@@ -165,7 +176,7 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     fd_cal_clip = sigma_clip(fd_cal_stat.flatten(), sigma=sigma_1, maxiters=maxiters_1,
                             cenfunc=mean, masked=False, copy=False)
 
-    fd_stats = np.nanpercentile(fd_cal_clip, [0.1,50,99.9])
+    # fd_stats = np.nanpercentile(fd_cal_clip, [0.1,50,99.9])
     fd_max = fd_cal_clip.max()
 
     if plot_res:
@@ -228,10 +239,20 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     fd_cal_ampsub = fd_cal.copy()
     if f_sbtr_amp:
         sky_amp = np.zeros(nyamps, float)
+        sky_sigma_amp = np.zeros(nyamps, float)
         for aa in range(nyamps):
             print('Working on the %dth apmlifier'%aa)
             fd_cal_amp_tmp = fd_cal_fin[:,yamp_low[aa]:yamp_low[aa]+dely]
-            sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp)
+            if False:#True:
+                # sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp)
+                sky_amp[aa] = 0
+                sky_sigma_amp[aa] = np.nanstd(fd_cal_amp_tmp)
+            else:
+                filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters, cenfunc='median')
+                sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
+                sky_sigma_amp[aa] = np.nanstd(fd_cal_amp_tmp[~filtered_data.mask]-sky_amp[aa])
+
+
             fd_cal_ampsub[:,yamp_low[aa]:yamp_low[aa]+dely] -= sky_amp[aa]
 
     # 3.2 Then 1/f noise;
@@ -247,24 +268,70 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         nyamps = len(yamp_low)
 
     fd_cal_ampsub_fsub = fd_cal_ampsub.copy()
-    sky_f = np.zeros((nyamps,nxamps), float)
     
     if f_only_global:
         delx = 2040
         xamp_low = np.arange(4, ymax-4, delx)
         nxamps = len(xamp_low)
 
-    print('3.2 Global background in each apmlifiers')
+    # For deep read, reduce nyamps;
+    if READPATT[:4] == 'DEEP':
+        dely = int(dely*2)
+        yamp_low = np.arange(0, ymax, dely)
+        nyamps = len(yamp_low)
+
+    sky_f = np.zeros((nyamps,nxamps), float)
+
+    print('3.2 1/f subtraction in each apmlifiers')
     if False:#INSTRUME == 'MIRI':
         fd_cal_ampsub_fsub[:,:] -= fd_bkg
     else:
+        flags_skip = np.zeros((nyamps,nxamps),int)
         for aa in range(nyamps):
             print('Working on the %dth apmlifier'%aa)
             for bb in range(nxamps):
-                fd_cal_amp_tmp = fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx]
-                filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters)
-                sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
+                fd_cal_amp_tmp = fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx].flatten()
+                if True:#False:
+                    # res = stats.sigma_clipped_stats(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters, cenfunc=mean)  
+                    filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters, cenfunc=mean)
+                    mask = np.where(np.abs(fd_cal_amp_tmp[~filtered_data.mask]) < sky_amp[aa] + sky_sigma_amp[aa] * nsig_sky)
+                    npix = len(fd_cal_amp_tmp[~filtered_data.mask][mask])
+                    sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask][mask])
+                else:
+                    con = np.where(np.abs(fd_cal_amp_tmp) < sky_amp[aa] + sky_sigma_amp[aa] * nsig_sky)
+                    npix = len(fd_cal_amp_tmp[con])
+
+                npix_min = nfracpix_min * fd_cal_amp_tmp.shape[0]
+                # if aa == 2 and bb>1300 and bb<1700:
+                #     print(nfracpix_min, fd_cal_amp_tmp.shape[0], npix)
+                #     print(bb, res)
+                if npix < npix_min:
+                    # if verbose:
+                    #     print('not enough pixel; skipping 1/f subtraction.')
+                    flags_skip[aa,bb] = 1
+                    continue
+                # sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[con])
+                # sky_f[aa,bb] = np.nanmedian(filtered_data)
                 fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
+
+
+        # Revisit only flagged;
+        if True:
+            mask = np.where(flags_skip)
+            for ii in range(len(mask[0])):
+                aa = mask[0][ii]
+                bb = mask[1][ii]
+                con = (flags_skip[:,bb] == 0)
+                if len(sky_f[:,bb][con])>0:
+                    fd_tmp = fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx].flatten()
+
+                    filtered_data = sigma_clip(fd_tmp, sigma=sigma, maxiters=maxiters, cenfunc=mean)
+                    mask_tmp = np.where(np.abs(fd_tmp[~filtered_data.mask]) < sky_amp[aa] + sky_sigma_amp[aa] * nsig_sky)
+
+                    # sky_f[aa,bb] = np.nanmedian(sky_f[:,bb][con])
+                    sky_f[aa,bb] = np.nanmedian(fd_tmp[~filtered_data.mask][mask_tmp])
+                    fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
+
 
         if INSTRUME == 'MIRI' and not f_only_global:
             # subtract stripes in the other direction;
@@ -335,6 +402,9 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                     print('NIRCam image. Transversing')
                 fd_cal_ampsub_fsub = fd_cal_ampsub_fsub.T
                 dq_cal = dq_cal.T
+
+            # Retrieve 0-value pixels back?
+            fd_cal_ampsub_fsub[con_zero] = 0
 
             hdul['SCI'].data = fd_cal_ampsub_fsub
             hdul['DQ'].data = dq_cal
