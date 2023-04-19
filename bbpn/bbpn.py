@@ -158,6 +158,7 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     #
     # 1. Exclude positive pixels originating from sources;
     #
+    print('Working on %s'%file_cal.split('/')[-1])
     if INSTRUME == 'MIRI':
         var_flat_lim = 1e-4
         flat_cal = fits.open(file_cal)['VAR_FLAT'].data.T
@@ -243,7 +244,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         sky_amp = np.zeros(nyamps, float)
         sky_sigma_amp = np.zeros(nyamps, float)
         for aa in range(nyamps):
-            print('Working on the %dth apmlifier'%aa)
+            if verbose:
+                print('Working on the %dth apmlifier'%aa)
             fd_cal_amp_tmp = fd_cal_fin[:,yamp_low[aa]:yamp_low[aa]+dely]
             if False:#True:
                 # sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp)
@@ -289,7 +291,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     else:
         flags_skip = np.zeros((nyamps,nxamps),int)
         for aa in range(nyamps):
-            print('Working on the %dth apmlifier'%aa)
+            if verbose:
+                print('Working on the %dth apmlifier'%aa)
             for bb in range(nxamps):
                 fd_cal_amp_tmp = fd_cal_ampsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx].flatten()
                 if True:#False:
@@ -352,7 +355,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
             # subtract stripes in the other direction;
             print('MIRI; subtracting 1/f in the other direction;')
             for aa in range(nyamps):
-                print('Working on the %dth apmlifier'%aa)
+                if verbose:
+                    print('Working on the %dth apmlifier'%aa)
                 for bb in range(nxamps):
                     fd_cal_amp_tmp = fd_cal_ampsub[xamp_low[bb]:xamp_low[bb]+delx, yamp_low[aa]:yamp_low[aa]+dely]
                     filtered_data = sigma_clip(fd_cal_amp_tmp, sigma=sigma, maxiters=maxiters)
