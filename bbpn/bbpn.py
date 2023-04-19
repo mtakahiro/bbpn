@@ -254,7 +254,6 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                 sky_amp[aa] = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
                 sky_sigma_amp[aa] = np.nanstd(fd_cal_amp_tmp[~filtered_data.mask]-sky_amp[aa])
 
-
             fd_cal_ampsub[:,yamp_low[aa]:yamp_low[aa]+dely] -= sky_amp[aa]
 
     # 3.2 Then 1/f noise;
@@ -315,7 +314,6 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                 # sky_f[aa,bb] = np.nanmedian(fd_cal_amp_tmp[con])
                 # sky_f[aa,bb] = np.nanmedian(filtered_data)
                 fd_cal_ampsub_fsub[yamp_low[aa]:yamp_low[aa]+dely, xamp_low[bb]:xamp_low[bb]+delx] -= sky_f[aa,bb]
-
 
         # Revisit only flagged;
         if True:
@@ -411,6 +409,7 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         plt.imshow(np.log(abs(f_s)), cmap='gray')
         plt.title('Final image in Fourier space')
         plt.savefig(os.path.join(plot_out,'%s'%(file_cal.split('/')[-1].replace('_cal.fits', '_cal_cor_fourier.png'))))
+        plt.close()
         # plt.show()
 
     #
