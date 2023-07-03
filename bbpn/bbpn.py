@@ -12,28 +12,27 @@ from photutils import Background2D, MedianBackground, detect_sources, deblend_so
 
 
 def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=None,
-                nxbin=1000):
+                nxbin=1000, perc=[10,90], dpi=150, pdf=False):
     '''Note that for NIRCam, plot is transversed, so it looks different from the input fits in e.g., DS9.
     '''
     fig_mosaic = """
-    AAAAAC
-    AAAAAC
-    AAAAAC
-    AAAAAC
-    AAAAAC
-    BBBBBD
+    AAAAAAC
+    AAAAAAC
+    AAAAAAC
+    AAAAAAC
+    AAAAAAC
+    AAAAAAC
+    BBBBBB.
     """
-    fig,axes = plt.subplot_mosaic(mosaic=fig_mosaic, figsize=(5.5,5.5))
-    fig.subplots_adjust(top=0.98, bottom=0.16, left=0.08, right=0.99, hspace=0.15, wspace=0.25)
+    fig,axes = plt.subplot_mosaic(mosaic=fig_mosaic, figsize=(5.5,5.5), constrained_layout=True)
+    fig.subplots_adjust(top=0.98, bottom=0.1, left=0.1, right=0.98, hspace=0.01, wspace=0.01)
     ax1 = axes['A']
     ax2 = axes['B']
     ax3 = axes['C']
-    ax4 = axes['D']
-    ax4.set_frame_on(False)
 
     if vmin==None or vmax==None:
-        vmin, vmax = np.nanpercentile(fd_cal, [1,99])
-    ax1.imshow(fd_cal, vmin=vmin, vmax=vmax, origin='lower')
+        vmin, vmax = np.nanpercentile(fd_cal, perc)
+    ax1.imshow(fd_cal, vmin=vmin, vmax=vmax, origin='lower', aspect='auto')
 
     yy = np.linspace(0, fd_cal.shape[0], nxbin)
     xx = np.linspace(0, fd_cal.shape[1], nxbin)
@@ -47,11 +46,11 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
         fx[nx] = np.nanmedian(fd_cal[:,nx1:nx2])
         fy[nx] = np.nanmedian(fd_cal[nx1:nx2,:])
 
-    ax2.plot(xx, fx, ls='-', color='lightblue', lw=1)
-    ax3.plot(fy, xx, ls='-', color='lightblue', lw=1)
+    ax2.plot(xx, fx, ls='-', color='r', lw=1.)
+    ax3.plot(fy, xx, ls='-', color='r', lw=1.)
     if y2max == None or x3max == None:
-        y2max = np.nanpercentile(np.abs(fx),99) * 1.5
-        x3max = np.nanpercentile(np.abs(fy),99) * 1.5
+        y2max = np.nanpercentile(np.abs(fx),perc[1]) * 1.25
+        x3max = np.nanpercentile(np.abs(fy),perc[1]) * 1.25
 
     # Zero point;
     xx = np.arange(0, fd_cal.shape[1], 10)
@@ -62,22 +61,26 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
     ax2.set_ylim(-y2max,y2max)
     ax3.set_xlim(-x3max,x3max)
 
-    plt.tick_params(
-        axis='both',       # changes apply to the x-axis
-        which='both',      # both major and minor ticks are affected
-        bottom='off',      # ticks along the bottom edge are off
-        top='off',         # ticks along the top edge are off
-        left='off',      # ticks along the bottom edge are off
-        right='off',         # ticks along the top edge are off
-        labelbottom='off', # labels along the bottom edge are off
-        labelleft='off') # labels along the bottom edge are off
-    plt.setp(ax4.get_xticklabels(), visible=False)
-    plt.setp(ax4.get_yticklabels(), visible=False)
-    plt.setp(ax1.get_xticklabels(), visible=False)
-    plt.setp(ax1.get_yticklabels(), visible=False)
+    # plt.tick_params(
+    #     axis='both',       # changes apply to the x-axis
+    #     which='both',      # both major and minor ticks are affected
+    #     bottom='off',      # ticks along the bottom edge are off
+    #     top='off',         # ticks along the top edge are off
+    #     left='off',      # ticks along the bottom edge are off
+    #     right='off',         # ticks along the top edge are off
+    #     labelbottom='off', # labels along the bottom edge are off
+    #     labelleft='off') # labels along the bottom edge are off
 
-    plt.tight_layout()
-    plt.savefig(file_out)
+    plt.setp(ax3.get_xticklabels(), visible=False)
+    plt.setp(ax3.get_yticklabels(), visible=False)
+    plt.setp(ax1.get_xticklabels(), visible=False)
+    # plt.setp(ax1.get_yticklabels(), visible=False)
+
+    # plt.tight_layout()
+    if pdf:
+        plt.savefig(file_out.replace('.png', '.pdf'), dpi=dpi)
+    else:
+        plt.savefig(file_out, dpi=dpi)
     plt.close()
     return vmin, vmax, y2max, x3max
 
