@@ -12,7 +12,7 @@ from photutils import Background2D, MedianBackground, detect_sources, deblend_so
 
 
 def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=None,
-                nxbin=1000, perc=[10,90], dpi=150, pdf=False):
+                nxbin=2048, perc=[5,95], dpi=150, pdf=False, scl_ax=3.0, lock_ax=False):
     '''Note that for NIRCam, plot is transversed, so it looks different from the input fits in e.g., DS9.
     '''
     fig_mosaic = """
@@ -31,10 +31,11 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
     ax3 = axes['C']
 
     if vmin==None or vmax==None:
+        fd_cal -= np.nanmedian(fd_cal)
         vmin, vmax = np.nanpercentile(fd_cal, perc)
     ax1.imshow(fd_cal, vmin=vmin, vmax=vmax, origin='lower', aspect='auto')
 
-    yy = np.linspace(0, fd_cal.shape[0], nxbin)
+    # yy = np.linspace(0, fd_cal.shape[0], nxbin)
     xx = np.linspace(0, fd_cal.shape[1], nxbin)
     fx = np.zeros(len(xx), float)
     fy = np.zeros(len(xx), float)
@@ -48,9 +49,13 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
 
     ax2.plot(xx, fx, ls='-', color='r', lw=1.)
     ax3.plot(fy, xx, ls='-', color='r', lw=1.)
+    lock_ax = True
     if y2max == None or x3max == None:
-        y2max = np.nanpercentile(np.abs(fx),perc[1]) * 1.25
-        x3max = np.nanpercentile(np.abs(fy),perc[1]) * 1.25
+        y2max = np.nanpercentile(np.abs(fx),perc[1]) * scl_ax
+        if lock_ax:
+            x3max = y2max
+        else:
+            x3max = np.nanpercentile(np.abs(fy),perc[1]) * scl_ax
 
     # Zero point;
     xx = np.arange(0, fd_cal.shape[1], 10)
@@ -77,6 +82,7 @@ def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=N
     # plt.setp(ax1.get_yticklabels(), visible=False)
 
     # plt.tight_layout()
+    # pdf = True
     if pdf:
         plt.savefig(file_out.replace('.png', '.pdf'), dpi=dpi)
     else:
