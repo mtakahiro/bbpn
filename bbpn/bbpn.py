@@ -95,7 +95,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     plot_res=False, plot_out='./bbpn_out/', file_out=None, f_write=True, 
     sigma=2.5, maxiters=5, sigma_1=1.5, maxiters_1=30, nfracpix_min=0.5, nsig_sky=1.5,
     verbose=True, ymax=2048, mask_jump=False,
-    bkg_size=20, bkg_filt_size=3):
+    bkg_size=20, bkg_filt_size=3, 
+    cluster_field=True):
     '''
     Parameters
     ----------
@@ -133,6 +134,13 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     fd_cal = fits.open(file_cal)['SCI'].data
     dq_cal = fits.open(file_cal)['DQ'].data
     fd_seg = fits.open(file_seg)[0].data
+
+    if cluster_field:
+        bkg_size_icl = 64
+        bkg_filt_size_icl = 9
+        bkg_estimator = MedianBackground()
+        bkg_icl = Background2D(fd_cal, (bkg_size_icl,bkg_size_icl), filter_size=(bkg_filt_size_icl,bkg_filt_size_icl), bkg_estimator=bkg_estimator, exclude_percentile=100)
+        fd_cal -= bkg_icl.background
 
     # Mask miri;
     if INSTRUME == 'MIRI':
@@ -373,14 +381,16 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                     sky_tmp = np.nanmedian(fd_cal_amp_tmp[~filtered_data.mask])
                     fd_cal_ampsub_fsub[xamp_low[bb]:xamp_low[bb]+delx, yamp_low[aa]:yamp_low[aa]+dely] -= sky_tmp
 
-    # One last bkg tweak, to eliminate discontinuity;
-    data_for_bkg = fd_cal_ampsub_fsub.copy()
-    con_for_bkg = np.where((fd_seg > 0) | (dq_cal>0))
-    data_for_bkg[con_for_bkg] = np.nan
 
-    bkg_estimator = MedianBackground()
-    bkg = Background2D(data_for_bkg, (bkg_size,bkg_size), filter_size=(bkg_filt_size,bkg_filt_size), bkg_estimator=bkg_estimator, exclude_percentile=100)
-    fd_cal_ampsub_fsub -= bkg.background
+    if not cluster_field:
+        # One last bkg tweak, to eliminate discontinuity;
+        data_for_bkg = fd_cal_ampsub_fsub.copy()
+        con_for_bkg = np.where((fd_seg > 0) | (dq_cal>0))
+        data_for_bkg[con_for_bkg] = np.nan
+
+        bkg_estimator = MedianBackground()
+        bkg = Background2D(data_for_bkg, (bkg_size,bkg_size), filter_size=(bkg_filt_size,bkg_filt_size), bkg_estimator=bkg_estimator, exclude_percentile=100)
+        fd_cal_ampsub_fsub -= bkg.background
 
     # mask nan for miri;
     # if INSTRUME == 'MIRI':
@@ -428,6 +438,10 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     #
     # 5. Output
     #
+    if cluster_field:
+        # One last bkg tweak, to eliminate discontinuity;
+        fd_cal_ampsub_fsub += bkg_icl.background
+
     if f_write:
         if file_out == None:
             file_out = file_cal.replace('.fits','_bbpn.fits')
