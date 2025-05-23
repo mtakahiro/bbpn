@@ -8,7 +8,8 @@ import statistics
 from astropy.io import fits,ascii
 from astropy.convolution import Gaussian2DKernel,convolve_fft
 from astropy.stats import sigma_clip
-from photutils import Background2D, MedianBackground, detect_sources, deblend_sources#, source_properties
+from photutils.background import Background2D, MedianBackground
+#, detect_sources, deblend_sources#, source_properties
 
 
 def get_sciplot(fd_cal, file_out=None, vmin=None, vmax=None, y2max=None, x3max=None,
@@ -96,7 +97,8 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     sigma=2.5, maxiters=5, sigma_1=1.5, maxiters_1=30, nfracpix_min=0.5, nsig_sky=1.5,
     verbose=True, ymax=2048, mask_jump=False,
     bkg_size=20, bkg_filt_size=3, 
-    cluster_field=True):
+    cluster_field=True, 
+    convolve_seg=False, remove_negative=False):
     '''
     Parameters
     ----------
@@ -142,6 +144,21 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
         bkg_icl = Background2D(fd_cal, (bkg_size_icl,bkg_size_icl), filter_size=(bkg_filt_size_icl,bkg_filt_size_icl), bkg_estimator=bkg_estimator, exclude_percentile=100)
         fd_cal -= bkg_icl.background
 
+    # 
+    if convolve_seg:
+        fd_seg_conv = np.zeros(fd_seg.shape, float)
+        mask_seg = np.where(fd_seg>0)
+        fd_seg_conv[mask_seg] = 100.0
+        kernel = Gaussian2DKernel(x_stddev=3)
+        fd_seg_conv = convolve_fft(
+            fd_seg_conv, kernel, boundary="fill", fill_value=0, allow_huge=True
+        )
+        mask_seg = np.where(fd_seg_conv>=1e-3)
+        fd_seg_conv[mask_seg] = 1
+        mask_seg = np.where(fd_seg_conv<1e-3)
+        fd_seg_conv[mask_seg] = 0
+        fd_seg = fd_seg_conv
+
     # Mask miri;
     if INSTRUME == 'MIRI':
         fd_cal[:748,:359] = np.nan
@@ -164,6 +181,11 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
     # These are from Grizli's level 1 pipeline;
     con_zero = np.where((fd_cal == 0) & (dq_cal > 0))
     fd_cal[con_zero] = np.nan
+
+    # Some negative pixels from bcg subtraction;
+    if remove_negative:
+        con_neg = np.where((fd_cal < 0) & (dq_cal > 0))
+        fd_cal[con_neg] = np.nan
 
     if INSTRUME == 'NIRCAM' or INSTRUME == 'MIRI':
         if verbose:
@@ -197,7 +219,12 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
                             cenfunc=mean, masked=False, copy=False)
 
     # fd_stats = np.nanpercentile(fd_cal_clip, [0.1,50,99.9])
-    fd_max = fd_cal_clip.max()
+    try:
+        fd_max = np.nanmax(fd_cal_clip)
+    except:
+        print('%s has an issue.'%file_cal)
+        print(fd_cal_clip)
+        return False
 
     if plot_res:
         if not os.path.exists(plot_out):
@@ -461,6 +488,7 @@ def run(file_cal, file_seg=None, f_sbtr_amp=True, f_sbtr_each_amp=True, f_only_g
 
             hdul['SCI'].data = fd_cal_ampsub_fsub
             hdul['DQ'].data = dq_cal
+
             hdul.flush()
 
     return fd_cal_ampsub_fsub
