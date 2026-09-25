@@ -1,0 +1,45 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+    "setuptools_scm[toml]>=6.2",
+    "wheel",
+    "cibuildwheel >= 2.0.0",
+    "gitpython",
+]
+build-backend="setuptools.build_meta"
+
+[project]
+name="bbpn"
+requires-python=">=3.12"
+authors = [
+    {name = "Morishita Takahiro", email = "morishita@astr.tohoku.ac.jp"},
+]
+dependencies = [
+#    'asdf',
+    'astropy',
+#    'colorama',
+#    'corner',
+#    'dust_extinction',
+#    'emcee',
+#    'fsps>=0.4.7',
+#    'lmfit',
+#    'multiprocess',
+    'numpy>=1.21',
+#    'pandas',
+#    'pytest',
+#    'scipy>=1.5.1',
+#    'specutils',
+#    'sphinx_automodapi',
+#    'zeus-mcmc'
+]
+
+dynamic=["version","readme"]
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.rst"]}
+
+[tool.setuptools_scm]
+write_to = "bbpn/version.py"
+
+[tool.setuptools]
+package-dir = {'bbpn'='bbpn'}
