@@ -1,24 +1,22 @@
 import re
-import sys
-import os
-from pkg_resources import get_distribution, DistributionNotFound
+# import sys
+# import os
 
-__version_commit__ = ''
-_regex_git_hash = re.compile(r'.*\+g(\w+)')
-
-try:
-    __version__ = get_distribution(__name__).version
-except DistributionNotFound:
-    __version__ = 'dev'
+from .version import __version__
+__version_commit__ = ""
+_regex_git_hash = re.compile(r".*\+g(\w+)")
 
 if '+' in __version__:
     commit = _regex_git_hash.match(__version__).groups()
     if commit:
         __version_commit__ = commit[0]
 
-__author__ = 'Takahiro Morishita'
-__email__ = 'takahiro@ipac.caltech.edu'
-__credits__ = 'IPAC'
+from importlib.metadata import version
+__version_commit__ = version("bbpn")
+
+__author__ = "Takahiro Morishita"
+__email__ = "morishita@astr.tohoku.ac.jp"
+__credits__ = "Tohoku University"
 
 package = 'bbpn'
 
